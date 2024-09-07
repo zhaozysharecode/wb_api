@@ -8,7 +8,7 @@ from models import User,Post,Like,Comment
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 app = FastAPI()
@@ -20,10 +20,10 @@ def get_password_hash(password):
 
 
 class UserCreate(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=16, description="用户名")
+    password: str = Field(..., min_length=6, max_length=16, description="密码")
 
-@app.post("/register/")
+@app.post("/register/",summary="用户注册",description="用户注册接口",response_model=dict,tags=["用户"])
 def register(user:UserCreate, db: Session = Depends(get_db)):
     # 检查用户名是否已经存在
     existing_user = db.query(User).filter(User.username == user.username).first()
@@ -57,7 +57,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-@app.post("/login/")
+@app.post("/login/",summary="用户登录",description="用户登录接口",response_model=dict,tags=["用户"])
 def login(user:UserCreate, db: Session = Depends(get_db)):
     # 查找用户
     existing_user = db.query(User).filter(User.username == user.username).first()
@@ -69,8 +69,6 @@ def login(user:UserCreate, db: Session = Depends(get_db)):
     access_token = create_access_token(data={"sub": existing_user.username}, expires_delta=access_token_expires)
     
     return {"access_token": access_token, "token_type": "bearer"}
-
-
 
 
 
@@ -93,7 +91,7 @@ def verify_token(token: str):
 
 
 
-@app.get("/verify-token/")
+@app.get("/verify-token/", response_model=dict,description="验证token是否有效",summary="验证token是否有效",tags=["用户"])
 def verify_token_endpoint(token: str):
     token_data = verify_token(token)
     return {"message": "Token is valid", "user": token_data["username"]}
@@ -101,7 +99,7 @@ def verify_token_endpoint(token: str):
 
 
 
-@app.get("/posts/", response_model=List[dict])
+@app.get("/posts/", response_model=List[dict], summary="获取朋友圈内容", description="获取朋友圈内容列表",tags=["朋友圈"])
 def read_posts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     posts = db.query(Post).offset(skip).limit(limit).all()
     return [{"id": post.id, "content": post.content, "owner_id": post.owner_id} for post in posts]
@@ -133,7 +131,7 @@ def read_posts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
 class PostCreate(BaseModel):
     content: str
 
-@app.post("/posts/", status_code=status.HTTP_201_CREATED)
+@app.post("/posts/", status_code=status.HTTP_201_CREATED, response_model=dict, summary="发布朋友圈内容", description="发布朋友圈内容接口",tags=["朋友圈"])
 def create_post(post: PostCreate, db: Session = Depends(get_db), token_data: dict = Depends(verify_token)):
     # 从 token_data 中获取用户名
     username = token_data["username"]
@@ -179,7 +177,7 @@ def create_post(post: PostCreate, db: Session = Depends(get_db), token_data: dic
 class PostUpdate(BaseModel):
     content: str
 
-@app.put("/posts/{post_id}", response_model=dict)
+@app.put("/posts/{post_id}", response_model=dict, summary="更新朋友圈内容", description="更新朋友圈内容接口",tags=["朋友圈"])
 def update_post(post_id: int, post: PostUpdate, db: Session = Depends(get_db), token_data: dict = Depends(verify_token)):
     # 从 token_data 中获取用户名
     username = token_data["username"]
@@ -201,7 +199,7 @@ def update_post(post_id: int, post: PostUpdate, db: Session = Depends(get_db), t
     return {"message": "Post updated successfully", "post_id": post_record.id, "new_content": post_record.content}
 
 
-@app.delete("/posts/{post_id}", response_model=dict)
+@app.delete("/posts/{post_id}", response_model=dict, summary="删除朋友圈内容", description="删除朋友圈内容接口",tags=["朋友圈"])
 def delete_post(post_id: int, db: Session = Depends(get_db), token_data: dict = Depends(verify_token)):
     # 从 token_data 中获取用户名
     username = token_data["username"]
@@ -222,7 +220,7 @@ def delete_post(post_id: int, db: Session = Depends(get_db), token_data: dict = 
     return {"message": "Post deleted successfully", "post_id": post_id}
 
 
-@app.post("/posts/{post_id}/like", response_model=dict)
+@app.post("/posts/{post_id}/like", response_model=dict, summary="点赞朋友圈内容", description="点赞朋友圈内容接口",tags=["朋友圈"])
 def like_post(post_id: int, db: Session = Depends(get_db), token_data: dict = Depends(verify_token)):
     # 从 token_data 中获取用户名
     username = token_data["username"]
@@ -256,7 +254,7 @@ class CommentCreate(BaseModel):
     content: str
     parent_comment_id: int = None  # 可选字段，用于回复评论
 
-@app.post("/posts/{post_id}/comments", response_model=dict)
+@app.post("/posts/{post_id}/comments", response_model=dict, summary="评论朋友圈内容", description="评论朋友圈内容接口", tags=["朋友圈"])
 def create_comment(post_id: int, comment: CommentCreate, db: Session = Depends(get_db), token_data: dict = Depends(verify_token)):
     # 从 token_data 中获取用户名
     username = token_data["username"]
@@ -280,7 +278,7 @@ def create_comment(post_id: int, comment: CommentCreate, db: Session = Depends(g
     return {"message": "Comment created successfully", "comment_id": new_comment.id}
 
 
-@app.delete("/comments/{comment_id}", response_model=dict)
+@app.delete("/comments/{comment_id}", response_model=dict, summary="删除评论", description="删除评论接口", tags=["朋友圈"])
 def delete_comment(comment_id: int, db: Session = Depends(get_db), token_data: dict = Depends(verify_token)):
     # 从 token_data 中获取用户名
     username = token_data["username"]
